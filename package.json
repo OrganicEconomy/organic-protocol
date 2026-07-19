@@ -1,0 +1,40 @@
+{
+  "name": "organic-protocol",
+  "version": "0.1.0",
+  "description": "The shared protocol of the Organic Economy: wire formats, QR codes and API contracts, verified by the TypeScript compiler. Companion of organic-money.",
+  "keywords": [
+    "organic-economy",
+    "organic-money",
+    "protocol",
+    "qr"
+  ],
+  "license": "MIT",
+  "author": "suipotryot",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "PROTOCOL.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "mocha",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.0.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.0.0",
+    "chai": "^5.1.2",
+    "mocha": "^11.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
