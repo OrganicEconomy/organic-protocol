@@ -10,6 +10,14 @@
   ],
   "license": "MIT",
   "author": "suipotryot",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OrganicEconomy/organic-protocol.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OrganicEconomy/organic-protocol/issues"
+  },
+  "homepage": "https://github.com/OrganicEconomy/organic-protocol#readme",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
