@@ -1,6 +1,6 @@
 {
   "name": "organic-protocol",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "The shared protocol of the Organic Economy: wire formats, QR codes and API contracts, verified by the TypeScript compiler. Companion of organic-money.",
   "keywords": [
     "organic-economy",

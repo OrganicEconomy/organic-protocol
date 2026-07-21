@@ -22,7 +22,7 @@ The `url` is the server's **root** URL (no `/api`, no trailing slash), normalize
 
 ```json
 { "v": 1, "d": 20260719, "t": 3, "p": "<target pk>", "s": "<signer pk>",
-  "m": [20260719001], "i": [], "h": "<DER signature, hex>" }
+  "m": "BLeiCZk=", "i": "", "h": "<DER signature, hex>" }
 ```
 
 | Field | Long name | Content |
@@ -32,18 +32,22 @@ The `url` is the server's **root** URL (no `/api`, no trailing slash), normalize
 | `t` | type | transaction type (§3) |
 | `p` | target | recipient's public key |
 | `s` | signer | sender's public key |
-| `m` | money | money unit ids (`YYYYMMDDXXX`) |
-| `i` | invests | invest unit ids (`YYYYMMDD9XXX`) |
+| `m` | money | packed money unit ids (§2.3) |
+| `i` | invests | packed invest unit ids (§2.3) |
 | `h` | signature | SECP256K1 DER signature, hex |
 
 ### 2.2 Block (`BlockWire`)
 
 ```json
 { "v": 1, "d": 20260719, "p": "<previous block signature>", "s": "<pk>",
-  "m": [], "i": [], "t": 42, "r": "<merkle root>", "h": "<signature>", "x": [ …TxWire ] }
+  "m": "", "i": "", "t": 42, "r": "<merkle root>", "h": "<signature>", "x": [ …TxWire ] }
 ```
 
-Here `t` is the **total** (cumulative economic experience); `p` is the previous block's signature (chain link); `x` is the transaction list.
+Here `t` is the **total** (cumulative economic experience); `p` is the previous block's signature (chain link); `x` is the transaction list. `m`/`i` are the available (unspent) money/invest ids at seal time, packed the same way as in a transaction (§2.3).
+
+### 2.3 Packed unit ids (`m`, `i`)
+
+Money and invest unit ids (`YYYYMMDDXXX` / `YYYYMMDD9XXX`, §2.1 table) are **not** a JSON array of numbers on the wire — a plain decimal array costs 12 bytes per id (11-12 digits plus a separator) for ~5 bytes of actual information, which matters once a paper bill (§4, `PP`) bundles many ids into one QR code. Instead: each id is packed into 5 big-endian bytes (comfortably covers every possible id), all ids are concatenated, and the result is base64-encoded into a single string. An empty array is the empty string `""`. Order and duplicates are preserved. Reference implementation: `packUnitIds`/`unpackUnitIds` in [`organic-money`](https://www.npmjs.com/package/organic-money) (`src/crypto.js`); `organic-protocol` validates the shape (`isTxWire`/`isBlockWire`) but does not implement the packing itself.
 
 ## 3. Transaction types
 

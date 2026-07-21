@@ -17,8 +17,8 @@ const payTx: TxWire = {
   t: TxType.PAY,
   p: '03' + 'cd'.repeat(32),
   s: '02' + 'ab'.repeat(32),
-  m: [20260719001, 20260719002],
-  i: [],
+  m: 'BLeiCZkEt6IJmg==', // packUnitIds([20260719001, 20260719002]) — organic-money
+  i: '',
   h: '30450221' + 'ee'.repeat(32),
 }
 
@@ -65,6 +65,23 @@ describe('QR round-trips', () => {
     const decoded = decodeQr(qr)
     expect(decoded.type).to.equal('PP')
     if (decoded.type === 'PP') expect(decoded.payload.tx).to.deep.equal(paperTx)
+  })
+})
+
+describe('size', () => {
+  it('packing money ids keeps a large paper bill meaningfully smaller than the old array format', () => {
+    // organic-protocol doesn't implement packing itself (that's organic-money's
+    // packUnitIds) — build the same packed buffer by hand just to measure the wire size.
+    const ids = Array.from({ length: 200 }, (_, i) => 20260721000 + i)
+    const packed = Buffer.alloc(ids.length * 5)
+    ids.forEach((id, idx) => packed.writeUIntBE(id, idx * 5, 5))
+    const m = packed.toString('base64')
+
+    const packedQr = encodePaperQr({ tx: { ...paperTx, m, i: '' } })
+    const oldFormatQr = `OM1:PP:${JSON.stringify({ tx: { ...paperTx, m: ids, i: [] } })}`
+
+    // measured ratio is ~0.60; 0.65 leaves headroom without being a no-op assertion
+    expect(packedQr.length).to.be.below(oldFormatQr.length * 0.65)
   })
 })
 

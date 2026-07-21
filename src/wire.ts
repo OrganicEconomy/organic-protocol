@@ -34,6 +34,17 @@ export type IntDate = number
  */
 export type UnitId = number
 
+/**
+ * Wire representation of a `UnitId[]`: each id packed into 5 big-endian
+ * bytes (comfortably covers every possible money/invest id), concatenated,
+ * then base64-encoded. An empty array is the empty string. A plain JSON
+ * number array costs 12 bytes per id (11-12 decimal digits + a separator)
+ * for ~5 bytes of actual information — this roughly halves the size of a
+ * transaction or block on the wire, which matters most for QR-encoded
+ * paper bills. Mirrors `packUnitIds`/`unpackUnitIds` in organic-money.
+ */
+export type PackedUnitIds = string
+
 /** Compressed SECP256K1 public key, hex-encoded (33 bytes → 66 chars). */
 export type PublicKeyHex = string
 
@@ -51,8 +62,8 @@ export interface TxWire {
   t: TxType
   p: PublicKeyHex
   s: PublicKeyHex
-  m: UnitId[]
-  i: UnitId[]
+  m: PackedUnitIds
+  i: PackedUnitIds
   h: SignatureHex
 }
 
@@ -68,8 +79,8 @@ export interface BlockWire {
   d: IntDate
   p: string
   s: PublicKeyHex
-  m: UnitId[]
-  i: UnitId[]
+  m: PackedUnitIds
+  i: PackedUnitIds
   t: number
   r: string
   h: SignatureHex
@@ -78,8 +89,8 @@ export interface BlockWire {
 
 const isHex = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-fA-F]*$/.test(s)
 
-const isUnitIdArray = (a: unknown): a is UnitId[] =>
-  Array.isArray(a) && a.every((n) => typeof n === 'number' && Number.isInteger(n))
+const isPackedUnitIds = (s: unknown): s is PackedUnitIds =>
+  typeof s === 'string' && /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(s)
 
 /** Structural check that an unknown value is a well-formed TxWire. */
 export function isTxWire(o: unknown): o is TxWire {
@@ -94,8 +105,8 @@ export function isTxWire(o: unknown): o is TxWire {
     t.t <= TxType.EARN &&
     isHex(t.p) &&
     isHex(t.s) &&
-    isUnitIdArray(t.m) &&
-    isUnitIdArray(t.i) &&
+    isPackedUnitIds(t.m) &&
+    isPackedUnitIds(t.i) &&
     isHex(t.h)
   )
 }
@@ -109,8 +120,8 @@ export function isBlockWire(o: unknown): o is BlockWire {
     typeof b.d === 'number' &&
     isHex(b.p) &&
     isHex(b.s) &&
-    isUnitIdArray(b.m) &&
-    isUnitIdArray(b.i) &&
+    isPackedUnitIds(b.m) &&
+    isPackedUnitIds(b.i) &&
     typeof b.t === 'number' &&
     isHex(b.r) &&
     isHex(b.h) &&
