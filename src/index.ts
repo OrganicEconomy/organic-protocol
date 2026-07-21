@@ -5,6 +5,7 @@ export {
   isBlockWire,
   type IntDate,
   type UnitId,
+  type PackedUnitIds,
   type PublicKeyHex,
   type SignatureHex,
   type TxWire,
