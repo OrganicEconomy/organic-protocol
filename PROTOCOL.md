@@ -35,15 +35,29 @@ The `url` is the server's **root** URL (no `/api`, no trailing slash), normalize
 | `m` | money | packed money unit ids (§2.3) |
 | `i` | invests | packed invest unit ids (§2.3) |
 | `h` | signature | SECP256K1 DER signature, hex |
+| `q`? | quantity | ratio (SETACTOR) or spending cap, `-1` = unlimited (SETPAYER) — required on those two types only |
+| `e`? | ecosystem | target ecosystem's public key — required on SETADMIN/SETACTOR/SETPAYER/UNSETADMIN/UNSETACTOR/UNSETPAYER/PAYERORDER, absent on every other type |
+| `x`? | exercised order | EARN only: signature of the PayerOrder it fulfills, present only when produced by `order()` |
+
+`q`/`e`/`x` are part of the signed preimage on the types where they apply — not cosmetic metadata. They must be absent on every type that doesn't use them (§3 lists which).
 
 ### 2.2 Block (`BlockWire`)
 
 ```json
 { "v": 1, "d": 20260719, "p": "<previous block signature>", "s": "<pk>",
-  "m": "", "i": "", "t": 42, "r": "<merkle root>", "h": "<signature>", "x": [ …TxWire ] }
+  "m": "", "i": "", "t": 1, "e": 42, "r": "<merkle root>", "h": "<signature>", "x": [ …TxWire ] }
 ```
 
-Here `t` is the **total** (cumulative economic experience); `p` is the previous block's signature (chain link); `x` is the transaction list. `m`/`i` are the available (unspent) money/invest ids at seal time, packed the same way as in a transaction (§2.3).
+Here `t` is the **block type** (not a total, despite the letter — see the table below); `p` is the previous block's signature (chain link); `x` is the transaction list. `m`/`i` are the available (unspent) money/invest ids at seal time, packed the same way as in a transaction (§2.3). `e` is the cumulative economic experience — present only on citizen block types, absent on ecosystem ones.
+
+| `t` | Block type | Carries `e`? |
+|---|---|---|
+| 1 | CITIZEN | yes |
+| 2 | ECOSYSTEM | no |
+| 3 | CITIZENBIRTH | yes |
+| 4 | CITIZENINIT | yes |
+| 5 | ECOSYSTEMBIRTH | no |
+| 6 | ECOSYSTEMINIT | no |
 
 ### 2.3 Packed unit ids (`m`, `i`)
 

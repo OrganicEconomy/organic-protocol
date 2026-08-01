@@ -1,6 +1,7 @@
 export {
   PROTOCOL_VERSION,
   TxType,
+  BlockType,
   isTxWire,
   isBlockWire,
   type IntDate,

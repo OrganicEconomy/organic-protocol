@@ -1,5 +1,5 @@
 import { expect } from 'chai'
-import { isBlockWire, isTxWire, TxType, type BlockWire, type TxWire } from '../src/index.js'
+import { isBlockWire, isTxWire, BlockType, TxType, type BlockWire, type TxWire } from '../src/index.js'
 
 // 'BLeiCZk=' / 'LyxUgxk=' are real packUnitIds([20260719001]) / packUnitIds([202607199001])
 // output (organic-money) — organic-protocol only validates the wire shape, not the packing
@@ -36,6 +36,34 @@ describe('isTxWire', () => {
     expect(isTxWire({ ...tx, t: 0 })).to.equal(false)
     expect(isTxWire({ ...tx, t: 14 })).to.equal(false)
   })
+
+  const ecoPk = '03' + 'ef'.repeat(32)
+
+  it('accepts SETACTOR/SETPAYER only with both q and e', () => {
+    expect(isTxWire({ ...tx, t: TxType.SETACTOR, q: 2, e: ecoPk })).to.equal(true)
+    expect(isTxWire({ ...tx, t: TxType.SETPAYER, q: -1, e: ecoPk })).to.equal(true)
+    expect(isTxWire({ ...tx, t: TxType.SETACTOR, e: ecoPk })).to.equal(false, 'missing q')
+    expect(isTxWire({ ...tx, t: TxType.SETACTOR, q: 2 })).to.equal(false, 'missing e')
+  })
+
+  it('accepts SETADMIN/UNSET*/PAYERORDER only with e, never q', () => {
+    for (const t of [TxType.SETADMIN, TxType.UNSETADMIN, TxType.UNSETACTOR, TxType.UNSETPAYER, TxType.PAYERORDER]) {
+      expect(isTxWire({ ...tx, t, e: ecoPk })).to.equal(true, `type ${t} with e`)
+      expect(isTxWire({ ...tx, t })).to.equal(false, `type ${t} missing e`)
+      expect(isTxWire({ ...tx, t, e: ecoPk, q: 1 })).to.equal(false, `type ${t} with unexpected q`)
+    }
+  })
+
+  it('accepts EARN with or without x, but rejects q/e on it', () => {
+    expect(isTxWire({ ...tx, t: TxType.EARN })).to.equal(true)
+    expect(isTxWire({ ...tx, t: TxType.EARN, x: 'dd'.repeat(16) })).to.equal(true)
+    expect(isTxWire({ ...tx, t: TxType.EARN, e: ecoPk })).to.equal(false)
+  })
+
+  it('rejects q/e/x on citizen-only types (PAY here)', () => {
+    expect(isTxWire({ ...tx, t: TxType.PAY, e: ecoPk })).to.equal(false)
+    expect(isTxWire({ ...tx, t: TxType.PAY, q: 1 })).to.equal(false)
+  })
 })
 
 describe('isBlockWire', () => {
@@ -46,17 +74,37 @@ describe('isBlockWire', () => {
     s: tx.s,
     m: 'BLeiCZk=',
     i: 'LyxUgxk=',
-    t: 8,
+    t: BlockType.CITIZEN,
+    e: 8,
     r: 'bb'.repeat(16),
     h: 'cc'.repeat(16),
     x: [tx],
   }
 
-  it('accepts a well-formed block', () => {
+  it('accepts a well-formed citizen block (with experience)', () => {
     expect(isBlockWire(block)).to.equal(true)
   })
 
   it('rejects a block holding a malformed transaction', () => {
     expect(isBlockWire({ ...block, x: [{ ...tx, t: 99 }] })).to.equal(false)
+  })
+
+  it('rejects a citizen block missing experience', () => {
+    const { e, ...withoutExperience } = block
+    expect(isBlockWire(withoutExperience)).to.equal(false)
+  })
+
+  it('accepts a well-formed ecosystem block (no experience)', () => {
+    const { e, ...ecoBlock } = block
+    expect(isBlockWire({ ...ecoBlock, t: BlockType.ECOSYSTEM })).to.equal(true)
+  })
+
+  it('rejects an ecosystem block carrying experience', () => {
+    expect(isBlockWire({ ...block, t: BlockType.ECOSYSTEM })).to.equal(false)
+  })
+
+  it('rejects an out-of-range block type', () => {
+    expect(isBlockWire({ ...block, t: 0 })).to.equal(false)
+    expect(isBlockWire({ ...block, t: 7 })).to.equal(false)
   })
 })

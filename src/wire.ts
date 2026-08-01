@@ -24,6 +24,21 @@ export enum TxType {
   EARN = 13,
 }
 
+/**
+ * Block types (see PROTOCOL.md §2.2). Mirrors organic-money's BLOCKTYPE —
+ * this is the block's own `t` field, not to be confused with TxType above.
+ * CITIZEN/CITIZENBIRTH/CITIZENINIT carry economic experience (`e` on
+ * BlockWire); the ECOSYSTEM* kinds don't.
+ */
+export enum BlockType {
+  CITIZEN = 1,
+  ECOSYSTEM = 2,
+  CITIZENBIRTH = 3,
+  CITIZENINIT = 4,
+  ECOSYSTEMBIRTH = 5,
+  ECOSYSTEMINIT = 6,
+}
+
 /** Date as a YYYYMMDD integer, e.g. 20260719. */
 export type IntDate = number
 
@@ -55,6 +70,14 @@ export type SignatureHex = string
  * A transaction in wire format (short field names for compactness).
  * Field meanings: v=version, d=date, t=type, p=target, s=signer,
  * m=money ids, i=invest ids, h=signature.
+ *
+ * Ecosystem-related types (see PROTOCOL.md §3) carry extra fields, all part
+ * of the signed preimage (not cosmetic metadata):
+ *   q — ratio (SETACTOR) or spending cap, -1 = unlimited (SETPAYER)
+ *   e — target ecosystem's public key (SETADMIN/SETACTOR/SETPAYER/
+ *       UNSETADMIN/UNSETACTOR/UNSETPAYER/PAYERORDER)
+ *   x — EARN only: signature of the PayerOrder it fulfills, present only
+ *       when produced by order() (absent for distributeSalary()/earn())
  */
 export interface TxWire {
   v: number
@@ -65,14 +88,21 @@ export interface TxWire {
   m: PackedUnitIds
   i: PackedUnitIds
   h: SignatureHex
+  q?: number
+  e?: PublicKeyHex
+  x?: SignatureHex
 }
 
 /**
  * A sealed (or open) block in wire format.
  * Field meanings: v=version, d=closedate, p=previous block signature,
  * s=signer, m=available money at seal time, i=available invests,
- * t=total (economic experience), r=merkle root, h=block signature,
- * x=transactions.
+ * t=block type (see BlockType — NOT a total, despite the letter), r=merkle
+ * root, h=block signature, x=transactions.
+ *
+ * e = cumulative economic experience, present only when `t` is a citizen
+ * block type (CITIZEN/CITIZENBIRTH/CITIZENINIT) — ecosystem blocks have no
+ * experience at all.
  */
 export interface BlockWire {
   v: number
@@ -81,10 +111,11 @@ export interface BlockWire {
   s: PublicKeyHex
   m: PackedUnitIds
   i: PackedUnitIds
-  t: number
+  t: BlockType
   r: string
   h: SignatureHex
   x: TxWire[]
+  e?: number
 }
 
 const isHex = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-fA-F]*$/.test(s)
@@ -92,11 +123,18 @@ const isHex = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-fA-F
 const isPackedUnitIds = (s: unknown): s is PackedUnitIds =>
   typeof s === 'string' && /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(s)
 
-/** Structural check that an unknown value is a well-formed TxWire. */
+/** Types requiring both q (ratio/cap) and e (target ecosystem). */
+const TX_TYPES_WITH_Q_AND_E: TxType[] = [TxType.SETACTOR, TxType.SETPAYER]
+/** Types requiring e (target ecosystem) alone. */
+const TX_TYPES_WITH_E_ONLY: TxType[] = [
+  TxType.SETADMIN, TxType.UNSETADMIN, TxType.UNSETACTOR, TxType.UNSETPAYER, TxType.PAYERORDER,
+]
+
+/** Structural check that an unknown value is a well-formed TxWire, including its type-specific fields. */
 export function isTxWire(o: unknown): o is TxWire {
   if (typeof o !== 'object' || o === null) return false
   const t = o as Record<string, unknown>
-  return (
+  if (!(
     typeof t.v === 'number' &&
     typeof t.d === 'number' &&
     Number.isInteger(t.d) &&
@@ -108,14 +146,30 @@ export function isTxWire(o: unknown): o is TxWire {
     isPackedUnitIds(t.m) &&
     isPackedUnitIds(t.i) &&
     isHex(t.h)
-  )
+  )) return false
+
+  const type = t.t as TxType
+  if (TX_TYPES_WITH_Q_AND_E.includes(type)) {
+    return typeof t.q === 'number' && isHex(t.e) && t.x === undefined
+  }
+  if (TX_TYPES_WITH_E_ONLY.includes(type)) {
+    return t.q === undefined && isHex(t.e) && t.x === undefined
+  }
+  if (type === TxType.EARN) {
+    return t.q === undefined && t.e === undefined && (t.x === undefined || isHex(t.x))
+  }
+  // INIT/CREATE/PAY/ENGAGE/PAPER: none of q/e/x apply.
+  return t.q === undefined && t.e === undefined && t.x === undefined
 }
+
+/** Block types carrying economic experience (`e`) — citizen blocks only. */
+const BLOCK_TYPES_WITH_EXPERIENCE: BlockType[] = [BlockType.CITIZEN, BlockType.CITIZENBIRTH, BlockType.CITIZENINIT]
 
 /** Structural check that an unknown value is a well-formed BlockWire. */
 export function isBlockWire(o: unknown): o is BlockWire {
   if (typeof o !== 'object' || o === null) return false
   const b = o as Record<string, unknown>
-  return (
+  if (!(
     typeof b.v === 'number' &&
     typeof b.d === 'number' &&
     isHex(b.p) &&
@@ -123,9 +177,14 @@ export function isBlockWire(o: unknown): o is BlockWire {
     isPackedUnitIds(b.m) &&
     isPackedUnitIds(b.i) &&
     typeof b.t === 'number' &&
+    b.t >= BlockType.CITIZEN &&
+    b.t <= BlockType.ECOSYSTEMINIT &&
     isHex(b.r) &&
     isHex(b.h) &&
     Array.isArray(b.x) &&
     b.x.every(isTxWire)
-  )
+  )) return false
+
+  const hasExperience = BLOCK_TYPES_WITH_EXPERIENCE.includes(b.t as BlockType)
+  return hasExperience ? typeof b.e === 'number' : b.e === undefined
 }
