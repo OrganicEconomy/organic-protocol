@@ -85,7 +85,7 @@ Format: **`OM<version>:<TYPE>:<JSON payload>`** — the prefix lives outside the
 |---|---|---|
 | `CT` | `OM1:CT:{"pk","url","n","e"?}` | Contact card. `n` = display name; `e` = true for an ecosystem. |
 | `TX` | `OM1:TX:{"tx":<PAY TxWire>,"url"}` | Offline payment, camera-to-screen. `url` = the PAYER's server, for deferred verification (§5, `tx/verify`). |
-| `BR` | `OM1:BR:{"pk","url","n"}` | Validation request of a new citizen. Blocks are fetched via `GET {url}/api/v1/validations/{pk}` (Phase 2) — the QR is a pointer, not a container. |
+| `BR` | `OM1:BR:{"pk","url","n"}` | Validation request of a new citizen. The scanning admin's own device fetches the candidate's blocks via `GET {url}/api/v1/validations/{pk}` (§5.2b) — the QR is a pointer, not a container. |
 | `PP` | `OM1:PP:{"tx":<PAPER TxWire>}` | Printed paper bill. |
 
 Constraints: the `tx` of a `TX` is of type PAY; the one of a `PP` is of type PAPER.
@@ -118,15 +118,34 @@ All routes live under `{url}/api/v1`. JSON bodies. Errors carry `{ "error": "<me
 | `POST /papers/cash` | — | `PapersCashBody` → 200 | requires the full PAPER, verifies its crypto; `409 ALREADY_CASHED` |
 | `GET /papers/isCashed?hash=` | — | → `IsCashedResponse` \| 404 | 404 = never cashed |
 
+### 5.2b Endpoints (Phase 2 — ecosystems & validations)
+
+Ecosystem creation is free and instant — no admin approval, see the notes column. A citizen's validation is the only thing gated behind the core ecosystem's admins.
+
+| Method & route | Auth | Body → Response | Notes |
+|---|---|---|---|
+| `POST /ecosystems` | timestamp | `EcosystemCreateBody` → `EcosystemCreateResponse` | server generates the ecosystem's own key, self-signs and self-validates it; `founderPk` is recorded as `validatorpk` for attribution only. First ecosystem ever created on a server becomes its core (`iscore: true`) |
+| `GET /ecosystems?lat&lng&radiusKm` | — | → `EcosystemListEntry[]` | public directory; sorted by distance when `lat`/`lng` given |
+| `GET /ecosystems/mine?publickey=` | — | → `MyEcosystemEntry[]` | public — roles are already derivable from each ecosystem's own public chain, this just aggregates across all of them server-side |
+| `GET /ecosystems/:pk` | — | → `EcosystemInfoResponse` | full chain + metadata |
+| `PUT /ecosystems/:pk/meta` | timestamp | `EcosystemMetaUpdateBody` → 200 | caller must be `isAdmin(publickey)` on that ecosystem |
+| `POST /ecosystems/:pk/tx` | — | `EcosystemTxBody` → 200 | generic ingress for PAY/ENGAGE/role/PAYERORDER transactions targeting this ecosystem — same cross-verification duty as `tx/send` (§5.3), against the *signer's* own chain. A `PAYERORDER` executes immediately; the resulting payment is queued for a citizen target or applied directly for an ecosystem target — no separate claim step |
+| `POST /ecosystems/:pk/distribute` | timestamp | `EcosystemDistributeBody` → 200 | caller must be `isAdmin`/`isPayer`; manual only, no scheduling |
+| `GET /validations` | timestamp | → `ValidationListEntry[]` | caller must be a current admin of the server's core ecosystem |
+| `GET /validations/:pk` | timestamp | → `ValidationDetailResponse` | same auth; the admin's device reconstructs the chain locally and calls `validateAccount()` itself |
+| `GET /validations/status/:pk` | — | → `ValidationStatusResponse` | public — for the candidate to poll |
+| `POST /validations/:pk/approve` | block | `ValidationApproveBody` → 200 | `block` is the admin's own already-signed `InitializationBlock`; the server's real check is that its signer is *currently* a core admin (`403 NOT_CORE_ADMIN` otherwise), not just that the signature is valid |
+| `POST /validations/:pk/reject` | timestamp | `ValidationRejectBody` → 200 | caller must be a core admin; the row is kept with `status: 'rejected'`, not deleted |
+
 ### 5.3 Cross-verification (server duty)
 
-Before accepting on `tx/send` (and, in Phase 2, any ecosystem input), the server MUST:
+Before accepting on `tx/send` **or `ecosystems/:pk/tx`**, the server MUST:
 
 1. verify the cryptographic validity of the transaction;
-2. load the SAVED chain of the sender (`tx.s`) and validate it (`assertIsValid`);
+2. load the SAVED chain of the sender (`tx.s`) and validate it (`assertIsValid`) **and confirm it is validated (`isValidated`)** — a pending account's self-signed chain is well-formed but not yet trustworthy;
 3. verify the transaction exists in that chain's history (by its signature `h`).
 
-Without step 3, an attacker can sign a transaction carrying units they do not own. Client-side consequence: the **`pay → save → send` order is strict**.
+Without step 3, an attacker can sign a transaction carrying units they do not own. Without step 2's validation check, an unapproved candidate could act as if already validated. Client-side consequence: the **`pay → save → send` order is strict**.
 
 ### 5.4 One account = one active device
 
@@ -134,7 +153,7 @@ The server issues an opaque `devicetoken` (UUID) at `register` and at every `log
 
 ### 5.5 Error codes
 
-`INVALID_TX` · `INVALID_CHAIN` · `TX_NOT_IN_CHAIN` · `UNKNOWN_SENDER` · `UNKNOWN_USER` · `INVALID_SIGNATURE` · `DEVICE_REVOKED` · `ALREADY_CASHED`
+`INVALID_TX` · `INVALID_CHAIN` · `TX_NOT_IN_CHAIN` · `UNKNOWN_SENDER` · `UNKNOWN_USER` · `INVALID_SIGNATURE` · `DEVICE_REVOKED` · `ALREADY_CASHED` · `NOT_CORE_ADMIN` · `ALREADY_VALIDATED`
 
 ## 6. Versioning
 
@@ -146,4 +165,4 @@ The three evolve independently. Every implementation MUST announce its versions 
 
 ---
 
-*MIT license — © suipotryot. Phases 2 (ecosystems, validations) and 3 (federation) will extend this document without breaking v1.*
+*MIT license — © suipotryot. Phase 2 (ecosystems, validations) is now specified above (§5.2b) without breaking v1. Phase 3 (federation) will extend this document further.*
