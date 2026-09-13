@@ -133,7 +133,7 @@ Ecosystem creation is free and instant — no admin approval, see the notes colu
 | `POST /ecosystems/:pk/distribute` | timestamp | `EcosystemDistributeBody` → 200 | caller must be `isAdmin`/`isPayer`; manual only, no scheduling |
 | `GET /validations` | timestamp | → `ValidationListEntry[]` | caller must be a current admin of the server's core ecosystem |
 | `GET /validations/:pk` | timestamp | → `ValidationDetailResponse` | same auth; the admin's device reconstructs the chain locally and calls `validateAccount()` itself |
-| `GET /validations/status/:pk` | — | → `ValidationStatusResponse` | public — for the candidate to poll |
+| `GET /validations/status/:pk` | — | → `ValidationStatusResponse` | public — for the candidate to poll; `blocks` lets it adopt the validated chain the moment `status` flips to `active`, in the same round trip |
 | `POST /validations/:pk/approve` | block | `ValidationApproveBody` → 200 | `block` is the admin's own already-signed `InitializationBlock`; the server's real check is that its signer is *currently* a core admin (`403 NOT_CORE_ADMIN` otherwise), not just that the signature is valid |
 | `POST /validations/:pk/reject` | timestamp | `ValidationRejectBody` → 200 | caller must be a core admin; the row is kept with `status: 'rejected'`, not deleted |
 

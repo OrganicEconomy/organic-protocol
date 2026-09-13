@@ -290,8 +290,14 @@ export interface ValidationDetailResponse {
 
 // ── GET /api/v1/validations/status/:pk  (public) ──────────────────────────────
 
+/**
+ * blocks lets a still-pending candidate keep polling this single endpoint
+ * and, the moment status flips to active, adopt the now-validated chain
+ * (with the admin's InitializationBlock) without a second round trip.
+ */
 export interface ValidationStatusResponse {
   status: MembershipStatus
+  blocks: BlockWire[]
 }
 
 // ── POST /api/v1/validations/:pk/approve  (block-auth) ────────────────────────
