@@ -48,7 +48,7 @@ The `url` is the server's **root** URL (no `/api`, no trailing slash), normalize
   "m": "", "i": "", "t": 1, "e": 42, "r": "<merkle root>", "h": "<signature>", "x": [ …TxWire ] }
 ```
 
-Here `t` is the **block type** (not a total, despite the letter — see the table below); `p` is the previous block's signature (chain link); `x` is the transaction list. `m`/`i` are the available (unspent) money/invest ids at seal time, packed the same way as in a transaction (§2.3). `e` is the cumulative economic experience — present only on citizen block types, absent on ecosystem ones.
+Here `t` is the **block type** (not a total, despite the letter — see the table below); `p` is the previous block's signature (chain link); `x` is the transaction list. `m`/`i` are the available money/invest ids at seal time, packed the same way as in a transaction (§2.3): on a citizen block, `m` is the unspent money (expired money is cashed at the next creation, §3.1) and `i` holds only the invests of the last creation day. `e` is the cumulative economic experience — present only on citizen block types, absent on ecosystem ones.
 
 | `t` | Block type | Carries `e`? |
 |---|---|---|
@@ -59,9 +59,18 @@ Here `t` is the **block type** (not a total, despite the letter — see the tabl
 | 5 | ECOSYSTEMBIRTH | no |
 | 6 | ECOSYSTEMINIT | no |
 
-### 2.3 Packed unit ids (`m`, `i`)
+### 2.3 Unit ids and their packing (`m`, `i`)
 
-Money and invest unit ids (`YYYYMMDDXXX` / `YYYYMMDD9XXX`, §2.1 table) are **not** a JSON array of numbers on the wire — a plain decimal array costs 12 bytes per id (11-12 digits plus a separator) for ~5 bytes of actual information, which matters once a paper bill (§4, `PP`) bundles many ids into one QR code. Instead: each id is packed into 5 big-endian bytes (comfortably covers every possible id), all ids are concatenated, and the result is base64-encoded into a single string. An empty array is the empty string `""`. Order and duplicates are preserved. Reference implementation: `packUnitIds`/`unpackUnitIds` in [`organic-money`](https://www.npmjs.com/package/organic-money) (`src/crypto.js`); `organic-protocol` validates the shape (`isTxWire`/`isBlockWire`) but does not implement the packing itself.
+Each money or invest unit is an integer id that encodes the UTC day it was created for and its index within that day (`000` to `level - 1`, §3.1):
+
+| Unit | Format | Example |
+|---|---|---|
+| money | `YYYYMMDDXXX` | `20250614003` (4th money of 2025-06-14) |
+| invest | `YYYYMMDD9XXX` | `202506149003` (4th invest of 2025-06-14) |
+
+The day encoded in an id is what every date rule of §3.1 (expiry, invests of the day) reads.
+
+Unit ids are **not** a JSON array of numbers on the wire — a plain decimal array costs 12 bytes per id (11-12 digits plus a separator) for ~5 bytes of actual information, which matters once a paper bill (§4, `PP`) bundles many ids into one QR code. Instead: each id is packed into 5 big-endian bytes (comfortably covers every possible id), all ids are concatenated, and the result is base64-encoded into a single string. An empty array is the empty string `""`. Order and duplicates are preserved. Reference implementation: `packUnitIds`/`unpackUnitIds` in [`organic-money`](https://www.npmjs.com/package/organic-money) (`src/crypto.js`); `organic-protocol` validates the shape (`isTxWire`/`isBlockWire`) but does not implement the packing itself.
 
 ## 3. Transaction types
 
@@ -74,6 +83,27 @@ Money and invest unit ids (`YYYYMMDDXXX` / `YYYYMMDD9XXX`, §2.1 table) are **no
 | 5 | PAPER | 12 | PAYERORDER |
 | 6 | SETADMIN | 13 | EARN |
 | 7 | SETACTOR | | |
+
+### 3.1 Monetary rules (citizen chains)
+
+Every duration below is measured against the **date of the transaction** (`d`), never against a wall clock, so a chain stays verifiable at any later time.
+
+- **Level.** A citizen's level is `floor(cbrt(e)) + 1`, where `e` is the experience: every money unit a citizen pays to themself, receives (PAY, EARN) or cashes (PAPER signed by someone else) adds 1.
+- **Daily creation.** For every UTC day, a citizen creates `level` money and `level` invests, minus the ids already engaged (ENGAGE) for that day.
+- **Money lifetime.** A money unit dated `J` is usable from `J` to `J+29` included; from `J+30` it is *expired*. Expired money can no longer be spent; it is **cashed**, that is paid to oneself (PAY with `p` = own key), which adds its amount to the experience.
+- **Invests of the day.** A CREATE only holds the invests of its own day. An invest not engaged on its day is lost. Engaging the invests of future days (ENGAGE over several days) remains allowed: it is how an ecosystem knows its upcoming treasury.
+- **Catching up.** Creating after missed days produces, in this order:
+  1. if some missed days are already expired, a CREATE of their money, without invests;
+  2. if the wallet holds expired money (including what was just created), a self PAY cashing all of it;
+  3. a CREATE of the money of the still valid days and of the invests of the day, at the level reached after that cashing.
+
+A citizen chain is invalid if, replaying each block's wallet from the previous block's `m` (CREATE adds, the owner's PAY and PAPER remove):
+- a CREATE holds invests of another day than its own, or money dated after itself;
+- the owner spends money that is not in the wallet (a self PAY included);
+- the owner spends expired money to someone else;
+- a CREATE of still valid money or of invests happens before the expired money of the wallet is cashed.
+
+Reference implementation: `CitizenBlockchain.createMoneyAndInvests` and `assertIsValid` in [`organic-money`](https://www.npmjs.com/package/organic-money) ≥ 0.4.0. Ecosystem chains follow their own rules (to be specified).
 
 ## 4. QR codes
 
