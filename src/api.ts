@@ -149,13 +149,6 @@ export interface TxVerifyResponse {
   status: TxVerifyStatus
 }
 
-// ── POST /api/v1/papers/cash ──────────────────────────────────────────────────
-
-/** The full PAPER transaction is required — the server verifies it before registering the hash. */
-export interface PapersCashBody {
-  tx: TxWire
-}
-
 // ── GET /api/v1/papers/isCashed?hash=… ────────────────────────────────────────
 
 export interface IsCashedResponse {

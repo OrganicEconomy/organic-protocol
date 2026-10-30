@@ -58,7 +58,6 @@ export type {
   TxVerifyBody,
   TxVerifyStatus,
   TxVerifyResponse,
-  PapersCashBody,
   IsCashedResponse,
   EcosystemCreateBody,
   EcosystemCreateResponse,
