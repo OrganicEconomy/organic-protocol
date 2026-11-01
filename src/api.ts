@@ -28,6 +28,8 @@ export type MembershipStatus = 'pending-validation' | 'active' | 'rejected'
 export interface ApiError {
   error: string
   code?: ApiErrorCode
+  /** hash of the transaction the error is about, e.g. the refused paper of a `PUT /users/sign` */
+  tx?: string
 }
 
 // ── GET /api/v1/info ──────────────────────────────────────────────────────────
