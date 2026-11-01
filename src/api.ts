@@ -28,6 +28,8 @@ export type MembershipStatus = 'pending-validation' | 'active' | 'rejected'
 export interface ApiError {
   error: string
   code?: ApiErrorCode
+  /** hash of the transaction the error is about, e.g. the refused paper of a `PUT /users/sign` */
+  tx?: string
 }
 
 // ── GET /api/v1/info ──────────────────────────────────────────────────────────
@@ -147,13 +149,6 @@ export type TxVerifyStatus = 'confirmed' | 'pending' | 'invalid' | 'unknown-send
 
 export interface TxVerifyResponse {
   status: TxVerifyStatus
-}
-
-// ── POST /api/v1/papers/cash ──────────────────────────────────────────────────
-
-/** The full PAPER transaction is required — the server verifies it before registering the hash. */
-export interface PapersCashBody {
-  tx: TxWire
 }
 
 // ── GET /api/v1/papers/isCashed?hash=… ────────────────────────────────────────
