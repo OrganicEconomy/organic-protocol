@@ -73,6 +73,7 @@ export type {
   ValidationListResponse,
   ValidationDetailResponse,
   ValidationStatusResponse,
+  MyValidationResponse,
   ValidationApproveBody,
   ValidationRejectBody,
 } from './api.js'
