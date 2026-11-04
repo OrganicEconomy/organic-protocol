@@ -68,7 +68,6 @@ export type {
   EcosystemInfoResponse,
   EcosystemMetaUpdateBody,
   EcosystemTxBody,
-  EcosystemDistributeBody,
   ValidationListEntry,
   ValidationListResponse,
   ValidationDetailResponse,
@@ -77,3 +76,10 @@ export type {
   ValidationApproveBody,
   ValidationRejectBody,
 } from './api.js'
+
+export {
+  REQUEST_AUTH_HEADERS,
+  REQUEST_AUTH_TOLERANCE_SECONDS,
+  hashRequestAuth,
+  type RequestAuthFields,
+} from './request-auth.js'

@@ -14,6 +14,8 @@ export type ApiErrorCode =
   | 'UNKNOWN_SENDER'
   | 'UNKNOWN_USER'
   | 'INVALID_SIGNATURE'
+  /** a request-auth signature that was already used once */
+  | 'REPLAYED_REQUEST'
   | 'DEVICE_REVOKED'
   | 'ALREADY_CASHED'
   /** the signer proved their identity but isn't currently a core admin */
@@ -99,27 +101,22 @@ export interface LoginResponse {
   devicetoken: string
 }
 
-// ── PUT /api/v1/users/save  (block-auth) ──────────────────────────────────────
+// ── PUT /api/v1/users/save  (request-auth) ──────────────────────────────────────
 
 export interface SaveBlockBody {
-  publickey: PublicKeyHex
   block: BlockWire
   devicetoken: string
 }
 
-// ── PUT /api/v1/users/sign  (block-auth) ──────────────────────────────────────
+// ── PUT /api/v1/users/sign  (request-auth) ──────────────────────────────────────
 
 export interface SignBlockBody {
-  publickey: PublicKeyHex
   block: BlockWire
 }
 
-// ── POST /api/v1/users/password  (timestamp-auth) ─────────────────────────────
+// ── POST /api/v1/users/password  (request-auth) ─────────────────────────────
 
 export interface PasswordChangeBody {
-  publickey: PublicKeyHex
-  /** Unix timestamp (seconds) also used by the timestamp-auth signature */
-  timestamp: number
   newpassword: string
   /** the secret key re-encrypted client-side with the new password */
   secretkey: string
@@ -135,7 +132,7 @@ export interface TxSendBody {
   tx: TxWire
 }
 
-// ── GET /api/v1/tx/list  (timestamp-auth) ─────────────────────────────────────
+// ── GET /api/v1/tx/list  (request-auth) ─────────────────────────────────────
 
 export type TxListResponse = TxWire[]
 
@@ -157,18 +154,16 @@ export interface IsCashedResponse {
   id: number | string
 }
 
-// ── POST /api/v1/ecosystems  (timestamp-auth as the founding citizen) ────────
+// ── POST /api/v1/ecosystems  (request-auth as the founding citizen) ────────
 
 /**
  * Creation is free and instant (§0.3 of Phase-2.md): the server generates the
  * ecosystem's own key, self-signs its birth block, and self-validates with
- * that same key — no separate approval step. founderPk is only the
- * authenticated requester, recorded as validatorpk for attribution; it is
- * not the signer of the resulting chain.
+ * that same key — no separate approval step. The authenticated requester is
+ * only recorded as validatorpk for attribution; it is not the signer of the
+ * resulting chain.
  */
 export interface EcosystemCreateBody {
-  founderPk: PublicKeyHex
-  timestamp: number
   name: string
   description?: string
   lat?: number
@@ -228,11 +223,9 @@ export interface EcosystemInfoResponse {
   blocks: BlockWire[]
 }
 
-// ── PUT /api/v1/ecosystems/:pk/meta  (timestamp-auth, admin only) ─────────────
+// ── PUT /api/v1/ecosystems/:pk/meta  (request-auth, admin only) ─────────────
 
 export interface EcosystemMetaUpdateBody {
-  publickey: PublicKeyHex
-  timestamp: number
   name?: string
   description?: string
   lat?: number
@@ -255,17 +248,13 @@ export interface EcosystemTxBody {
   tx: TxWire
 }
 
-// ── POST /api/v1/ecosystems/:pk/distribute  (timestamp-auth, admin/payer) ────
+// ── POST /api/v1/ecosystems/:pk/distribute  (request-auth, admin/payer) ────
 
-/** Manual only (Phase 2) — no scheduled/automatic distribution. */
-export interface EcosystemDistributeBody {
-  publickey: PublicKeyHex
-  timestamp: number
-}
+/** Manual only (Phase 2) — no scheduled/automatic distribution. No body. */
 
 // ── Validations — citizens only (an ecosystem validates itself, §0.3) ────────
 
-// ── GET /api/v1/validations  (timestamp-auth, core admin only) ───────────────
+// ── GET /api/v1/validations  (request-auth, core admin only) ───────────────
 
 export interface ValidationListEntry {
   pk: PublicKeyHex
@@ -275,7 +264,7 @@ export interface ValidationListEntry {
 
 export type ValidationListResponse = ValidationListEntry[]
 
-// ── GET /api/v1/validations/:pk  (timestamp-auth, core admin only) ───────────
+// ── GET /api/v1/validations/:pk  (request-auth, core admin only) ───────────
 
 /** The candidate's not-yet-validated chain, for the admin's device to locally call validateAccount(). */
 export interface ValidationDetailResponse {
@@ -289,7 +278,7 @@ export interface ValidationStatusResponse {
   status: MembershipStatus
 }
 
-// ── GET /api/v1/validations/mine  (timestamp-auth) ────────────────────────────
+// ── GET /api/v1/validations/mine  (request-auth) ────────────────────────────
 
 /**
  * blocks lets a still-pending candidate keep polling this single endpoint
@@ -301,23 +290,20 @@ export interface MyValidationResponse {
   blocks: BlockWire[]
 }
 
-// ── POST /api/v1/validations/:pk/approve  (block-auth) ────────────────────────
+// ── POST /api/v1/validations/:pk/approve  (request-auth) ────────────────────────
 
 /**
  * block is the InitializationBlock the admin already signed locally with
- * their own key (requireBlockAuth already proves that signature). The
- * server's own job is the part signature-proof alone can't give it: check
- * the signer is *currently* one of the core ecosystem's admins.
+ * their own key. The server's own job is the part signature-proof alone
+ * can't give it: check the signer is *currently* one of the core
+ * ecosystem's admins.
  */
 export interface ValidationApproveBody {
-  publickey: PublicKeyHex
   block: BlockWire
 }
 
-// ── POST /api/v1/validations/:pk/reject  (timestamp-auth, core admin only) ───
+// ── POST /api/v1/validations/:pk/reject  (request-auth, core admin only) ───
 
 export interface ValidationRejectBody {
-  publickey: PublicKeyHex
-  timestamp: number
   reason?: string
 }
