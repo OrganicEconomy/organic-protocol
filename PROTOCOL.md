@@ -124,12 +124,32 @@ Constraints: the `tx` of a `TX` is of type PAY; the one of a `PP` is of type PAP
 
 All routes live under `{url}/api/v1`. JSON bodies. Errors carry `{ "error": "<message>", "code": "<ApiErrorCode>"?, "tx": "<hash>"? }`, `tx` naming the transaction the error is about.
 
-### 5.1 Authentication schemes
+### 5.1 Request-auth
 
-**Block-auth** (`PUT /users/save`, `PUT /users/sign`) — `x-signature` header = signature of the submitted block's hash, by the account key:
-`x-signature = signHash(block.hash(), sk)`.
+Every authenticated route uses the same scheme: the client signs the request itself — method, path, content, the server it is meant for — and each signature is accepted only once.
 
-**Timestamp-auth** (`GET /tx/list`, `POST /users/password`, …) — `x-signature` header = `signHash(sha256(publickey + ":" + timestamp), sk)` with `publickey` and `timestamp` (Unix seconds) passed as params/body. Tolerance: ±5 minutes, otherwise 401.
+Four headers (names exported as `REQUEST_AUTH_HEADERS`):
+
+| Header | Value |
+|---|---|
+| `x-organic-publickey` | the signer's public key |
+| `x-organic-timestamp` | Unix seconds; accepted within ±`REQUEST_AUTH_TOLERANCE_SECONDS` (300) of the server's clock |
+| `x-organic-nonce` | 16 random bytes, hex — two otherwise identical requests sent in the same second stay distinct |
+| `x-signature` | `signHash(hashRequestAuth(fields), sk)` |
+
+`hashRequestAuth` (exported) is the sha256 of these lines joined by `\n`:
+
+1. the HTTP method, uppercased;
+2. the path and query **as the server receives them**, starting at `/api/v1` (a server mounted behind a subpath sees it stripped by its reverse proxy);
+3. the timestamp;
+4. the nonce;
+5. the hex sha256 of the raw body, exactly as sent (the empty string when there is none);
+6. the public key of the target server, as announced by `GET /info`;
+7. the signer's public key.
+
+The server answers `401` when a header is missing or the timestamp is out of tolerance, `401 INVALID_SIGNATURE` when the signature does not match, and `401 REPLAYED_REQUEST` for a signed request it already accepted. A server keeps the hashes it accepted for twice the tolerance; with several processes behind one address, that memory must be shared.
+
+The caller is the authenticated public key: request bodies carry no identity of their own.
 
 ### 5.2 Endpoints (Phase 1)
 
@@ -139,11 +159,11 @@ All routes live under `{url}/api/v1`. JSON bodies. Errors carry `{ "error": "<me
 | `GET /servers` | — | → `ServerListEntry[]` | directory of known servers |
 | `POST /users/register` | — | `RegisterBody` → `RegisterResponse` | the `secretkey` arrives ENCRYPTED (opaque to the server); the password is bcrypted on arrival |
 | `POST /users/login` | — | `LoginBody` → `LoginResponse` | **devicetoken rotation**: the previous device is revoked |
-| `PUT /users/save` | block | `SaveBlockBody` → 200 | `409 DEVICE_REVOKED` when the devicetoken is no longer the active one; `400` for an invalid block, including one holding a paper this citizen did not cash through `PUT /users/sign` |
-| `PUT /users/sign` | block | `SignBlockBody` → 200 | the only way to cash papers: each paper of the block is cross-verified against its issuer (§5.3), registered in the casher's name; the paper's referent, which must be this server's core, counter-signs the block; `409 ALREADY_CASHED` when another citizen cashed it; any refusal names the refused paper's hash in the error's `tx`; a block bringing no newly cashed paper changes nothing |
-| `POST /users/password` | timestamp | `PasswordChangeBody` → 200 | updates bcrypt + re-encrypted sk, without reading anything |
+| `PUT /users/save` | request | `SaveBlockBody` → 200 | `409 DEVICE_REVOKED` when the devicetoken is no longer the active one; `400` for an invalid block, including one holding a paper this citizen did not cash through `PUT /users/sign` |
+| `PUT /users/sign` | request | `SignBlockBody` → 200 | the only way to cash papers: each paper of the block is cross-verified against its issuer (§5.3), registered in the casher's name; the paper's referent, which must be this server's core, counter-signs the block; `409 ALREADY_CASHED` when another citizen cashed it; any refusal names the refused paper's hash in the error's `tx`; a block bringing no newly cashed paper changes nothing |
+| `POST /users/password` | request | `PasswordChangeBody` → 200 | updates bcrypt + re-encrypted sk, without reading anything |
 | `POST /tx/send` | — | `TxSendBody` → 200 | **MANDATORY cross-verification** (§5.3) |
-| `GET /tx/list` | timestamp | → `TxWire[]` | pending payments for the key |
+| `GET /tx/list` | request | → `TxWire[]` | pending payments for the key |
 | `POST /tx/verify` | — | `TxVerifyBody` → `TxVerifyResponse` | read-only; statuses: `confirmed` / `pending` / `invalid` / `unknown-sender` |
 | `GET /papers/isCashed?hash=` | — | → `IsCashedResponse` \| 404 | 404 = never cashed |
 
@@ -153,19 +173,19 @@ Ecosystem creation is free and instant — no admin approval, see the notes colu
 
 | Method & route | Auth | Body → Response | Notes |
 |---|---|---|---|
-| `POST /ecosystems` | timestamp | `EcosystemCreateBody` → `EcosystemCreateResponse` | server generates the ecosystem's own key, self-signs and self-validates it; `founderPk` is recorded as `validatorpk` for attribution only. First ecosystem ever created on a server becomes its core (`iscore: true`) |
+| `POST /ecosystems` | request | `EcosystemCreateBody` → `EcosystemCreateResponse` | server generates the ecosystem's own key, self-signs and self-validates it; the authenticated requester is recorded as `validatorpk` for attribution only. First ecosystem ever created on a server becomes its core (`iscore: true`) |
 | `GET /ecosystems?lat&lng&radiusKm` | — | → `EcosystemListEntry[]` | public directory; sorted by distance when `lat`/`lng` given |
 | `GET /ecosystems/mine?publickey=` | — | → `MyEcosystemEntry[]` | public — roles are already derivable from each ecosystem's own public chain, this just aggregates across all of them server-side |
 | `GET /ecosystems/:pk` | — | → `EcosystemInfoResponse` | full chain + metadata |
-| `PUT /ecosystems/:pk/meta` | timestamp | `EcosystemMetaUpdateBody` → 200 | caller must be `isAdmin(publickey)` on that ecosystem |
+| `PUT /ecosystems/:pk/meta` | request | `EcosystemMetaUpdateBody` → 200 | caller must be `isAdmin` on that ecosystem |
 | `POST /ecosystems/:pk/tx` | — | `EcosystemTxBody` → 200 | generic ingress for PAY/ENGAGE/role/PAYERORDER transactions targeting this ecosystem — same cross-verification duty as `tx/send` (§5.3), against the *signer's* own chain. A `PAYERORDER` executes immediately; the resulting payment is queued for a citizen target or applied directly for an ecosystem target — no separate claim step |
-| `POST /ecosystems/:pk/distribute` | timestamp | `EcosystemDistributeBody` → 200 | caller must be `isAdmin`/`isPayer`; manual only, no scheduling |
-| `GET /validations` | timestamp | → `ValidationListEntry[]` | caller must be a current admin of the server's core ecosystem |
-| `GET /validations/:pk` | timestamp | → `ValidationDetailResponse` | same auth; the admin's device reconstructs the chain locally and calls `validateAccount()` itself |
+| `POST /ecosystems/:pk/distribute` | request | no body → 200 | caller must be `isAdmin`/`isPayer`; manual only, no scheduling |
+| `GET /validations` | request | → `ValidationListEntry[]` | caller must be a current admin of the server's core ecosystem |
+| `GET /validations/:pk` | request | → `ValidationDetailResponse` | same auth; the admin's device reconstructs the chain locally and calls `validateAccount()` itself |
 | `GET /validations/status/:pk` | — | → `ValidationStatusResponse` | public — status only, e.g. to check a payment's recipient is an active citizen; never the chain, which holds the citizen's name, birthdate and history |
-| `GET /validations/mine?publickey=` | timestamp | → `MyValidationResponse` | for the candidate to poll; `blocks` lets it adopt the validated chain the moment `status` flips to `active`, in the same round trip |
-| `POST /validations/:pk/approve` | block | `ValidationApproveBody` → 200 | `block` is the admin's own already-signed `InitializationBlock`; the server's real check is that its signer is *currently* a core admin (`403 NOT_CORE_ADMIN` otherwise), not just that the signature is valid |
-| `POST /validations/:pk/reject` | timestamp | `ValidationRejectBody` → 200 | caller must be a core admin; the row is kept with `status: 'rejected'`, not deleted |
+| `GET /validations/mine` | request | → `MyValidationResponse` | for the candidate to poll; `blocks` lets it adopt the validated chain the moment `status` flips to `active`, in the same round trip |
+| `POST /validations/:pk/approve` | request | `ValidationApproveBody` → 200 | `block` is the admin's own already-signed `InitializationBlock`; the server's real check is that its signer is *currently* a core admin (`403 NOT_CORE_ADMIN` otherwise), not just that the signature is valid |
+| `POST /validations/:pk/reject` | request | `ValidationRejectBody` → 200 | caller must be a core admin; the row is kept with `status: 'rejected'`, not deleted |
 
 ### 5.3 Cross-verification (server duty)
 
@@ -183,7 +203,7 @@ The server issues an opaque `devicetoken` (UUID) at `register` and at every `log
 
 ### 5.5 Error codes
 
-`INVALID_TX` · `INVALID_CHAIN` · `TX_NOT_IN_CHAIN` · `UNKNOWN_SENDER` · `UNKNOWN_USER` · `INVALID_SIGNATURE` · `DEVICE_REVOKED` · `ALREADY_CASHED` · `NOT_CORE_ADMIN` · `ALREADY_VALIDATED`
+`INVALID_TX` · `INVALID_CHAIN` · `TX_NOT_IN_CHAIN` · `UNKNOWN_SENDER` · `UNKNOWN_USER` · `INVALID_SIGNATURE` · `REPLAYED_REQUEST` · `DEVICE_REVOKED` · `ALREADY_CASHED` · `NOT_CORE_ADMIN` · `ALREADY_VALIDATED`
 
 ## 6. Versioning
 
