@@ -160,7 +160,7 @@ The caller is the authenticated public key: request bodies carry no identity of 
 | `POST /users/register` | — | `RegisterBody` → `RegisterResponse` | the `secretkey` arrives ENCRYPTED (opaque to the server); the password is bcrypted on arrival |
 | `POST /users/login` | — | `LoginBody` → `LoginResponse` | **devicetoken rotation**: the previous device is revoked |
 | `PUT /users/save` | request | `SaveBlockBody` → 200 | `409 DEVICE_REVOKED` when the devicetoken is no longer the active one; `400` for an invalid block, including one holding a paper this citizen did not cash through `PUT /users/sign` |
-| `PUT /users/sign` | request | `SignBlockBody` → 200 | the only way to cash papers: each paper of the block is cross-verified against its issuer (§5.3), registered in the casher's name; the paper's referent, which must be this server's core, counter-signs the block; `409 ALREADY_CASHED` when another citizen cashed it; any refusal names the refused paper's hash in the error's `tx`; a block bringing no newly cashed paper changes nothing |
+| `PUT /users/sign` | request | `SignBlockBody` → 200 | `409 DEVICE_REVOKED` when the devicetoken is no longer the active one; the only way to cash papers: each paper of the block is cross-verified against its issuer (§5.3), registered in the casher's name; the paper's referent, which must be this server's core, counter-signs the block; `409 ALREADY_CASHED` when another citizen cashed it; any refusal names the refused paper's hash in the error's `tx`; a block bringing no newly cashed paper changes nothing |
 | `POST /users/password` | request | `PasswordChangeBody` → 200 | updates bcrypt + re-encrypted sk, without reading anything |
 | `POST /tx/send` | — | `TxSendBody` → 200 | **MANDATORY cross-verification** (§5.3) |
 | `GET /tx/list` | request | → `TxWire[]` | pending payments for the key |
@@ -199,7 +199,7 @@ Without step 3, an attacker can sign a transaction carrying units they do not ow
 
 ### 5.4 One account = one active device
 
-The server issues an opaque `devicetoken` (UUID) at `register` and at every `login`; only the last one issued is valid. A `save` carrying a stale token receives `409 DEVICE_REVOKED` — the app must then switch to read-only and offer the restore flow. This mechanism is not cryptographic (identity is still proven by `x-signature`); it prevents the accidental fork of a chain across two devices.
+The server issues an opaque `devicetoken` (UUID) at `register` and at every `login`; only the last one issued is valid. A `save` or a `sign` carrying a stale token receives `409 DEVICE_REVOKED` — the app must then switch to read-only and offer the restore flow. This mechanism is not cryptographic (identity is still proven by the request signature, §5.1); it prevents the accidental fork of a chain across two devices.
 
 ### 5.5 Error codes
 
