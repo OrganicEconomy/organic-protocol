@@ -112,6 +112,7 @@ export interface SaveBlockBody {
 
 export interface SignBlockBody {
   block: BlockWire
+  devicetoken: string
 }
 
 // ── POST /api/v1/users/password  (request-auth) ─────────────────────────────
