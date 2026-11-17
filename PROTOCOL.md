@@ -183,7 +183,7 @@ Ecosystem creation is free and instant — no admin approval, see the notes colu
 | `GET /validations` | request | → `ValidationListEntry[]` | caller must be a current admin of the server's core ecosystem |
 | `GET /validations/:pk` | request | → `ValidationDetailResponse` | same auth; the admin's device reconstructs the chain locally and calls `validateAccount()` itself |
 | `GET /validations/status/:pk` | — | → `ValidationStatusResponse` | public — status only, e.g. to check a payment's recipient is an active citizen; never the chain, which holds the citizen's name, birthdate and history |
-| `GET /validations/mine` | request | → `MyValidationResponse` | for the candidate to poll; `blocks` lets it adopt the validated chain the moment `status` flips to `active`, in the same round trip |
+| `GET /validations/mine` | request | → `MyValidationResponse` | the authenticated citizen's own stored `status` and `blocks`, whatever the status: a candidate polls it to adopt the validated chain the moment `status` flips to `active`, in the same round trip; an active citizen reads it to sync the device with the server when a session resumes |
 | `POST /validations/:pk/approve` | request | `ValidationApproveBody` → 200 | `block` is the admin's own already-signed `InitializationBlock`; the server's real check is that its signer is *currently* a core admin (`403 NOT_CORE_ADMIN` otherwise), not just that the signature is valid |
 | `POST /validations/:pk/reject` | request | `ValidationRejectBody` → 200 | caller must be a core admin; the row is kept with `status: 'rejected'`, not deleted |
 

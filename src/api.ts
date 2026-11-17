@@ -282,9 +282,12 @@ export interface ValidationStatusResponse {
 // ── GET /api/v1/validations/mine  (request-auth) ────────────────────────────
 
 /**
- * blocks lets a still-pending candidate keep polling this single endpoint
- * and, the moment status flips to active, adopt the now-validated chain
- * (with the admin's InitializationBlock) without a second round trip.
+ * The authenticated citizen's own stored status and chain, whatever the
+ * status. A still-pending candidate polls this single endpoint and, the
+ * moment status flips to active, adopts the now-validated chain (with the
+ * admin's InitializationBlock) without a second round trip. An active
+ * citizen reads it to bring the device back in line with the server when
+ * a session resumes.
  */
 export interface MyValidationResponse {
   status: MembershipStatus
