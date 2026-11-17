@@ -183,7 +183,7 @@ Ecosystem creation is free and instant — no admin approval, see the notes colu
 | `GET /validations` | request | → `ValidationListEntry[]` | caller must be a current admin of the server's core ecosystem |
 | `GET /validations/:pk` | request | → `ValidationDetailResponse` | same auth; the admin's device reconstructs the chain locally and calls `validateAccount()` itself |
 | `GET /validations/status/:pk` | — | → `ValidationStatusResponse` | public — status only, e.g. to check a payment's recipient is an active citizen; never the chain, which holds the citizen's name, birthdate and history |
-| `GET /validations/mine` | request | → `MyValidationResponse` | the authenticated citizen's own stored `status` and `blocks`, whatever the status: a candidate polls it to adopt the validated chain the moment `status` flips to `active`, in the same round trip; an active citizen reads it to sync the device with the server when a session resumes |
+| `GET /validations/mine` | request | → `MyValidationResponse` | the authenticated account's own stored `status` and `blocks`, whatever the status: a pending candidate polls it and adopts the validated chain from the very response where `status` flips to `active`; an active citizen reads it to resync the device with the server when a session resumes. Only the identity is checked, not the devicetoken: a revoked device can still read its chain (the read-only mode of §5.4) and learns it is revoked only from `save` / `sign`. `404` when the key has no account on this server |
 | `POST /validations/:pk/approve` | request | `ValidationApproveBody` → 200 | `block` is the admin's own already-signed `InitializationBlock`; the server's real check is that its signer is *currently* a core admin (`403 NOT_CORE_ADMIN` otherwise), not just that the signature is valid |
 | `POST /validations/:pk/reject` | request | `ValidationRejectBody` → 200 | caller must be a core admin; the row is kept with `status: 'rejected'`, not deleted |
 
@@ -199,7 +199,7 @@ Without step 3, an attacker can sign a transaction carrying units they do not ow
 
 ### 5.4 One account = one active device
 
-The server issues an opaque `devicetoken` (UUID) at `register` and at every `login`; only the last one issued is valid. A `save` or a `sign` carrying a stale token receives `409 DEVICE_REVOKED` — the app must then switch to read-only and offer the restore flow. This mechanism is not cryptographic (identity is still proven by the request signature, §5.1); it prevents the accidental fork of a chain across two devices.
+The server issues an opaque `devicetoken` (UUID) at `register` and at every `login`; only the last one issued is valid. A `save` or a `sign` carrying a stale token receives `409 DEVICE_REVOKED` — the app must then switch to read-only and offer the restore flow. This mechanism is not cryptographic (identity is still proven by the request signature, §5.1); it prevents the accidental fork of a chain across two devices. Reads such as `GET /validations/mine` do not check the devicetoken.
 
 ### 5.5 Error codes
 
